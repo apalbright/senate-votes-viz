@@ -1,6 +1,6 @@
 # Senate Votes Visualized
 
-Here is the relevant blog post:
+[Here is the relevant blog post.](https://thelittledataset.com/2017/08/01/senate-votes-visualized/)
 
 [Here](http://rpubs.com/apalbright/senate-votes-visualized) is the R notebook for creating updated graphics in this article.
 
