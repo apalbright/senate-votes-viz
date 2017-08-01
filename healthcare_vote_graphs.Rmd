@@ -1,0 +1,218 @@
+---
+title: "Senate Votes Visualized"
+output: html_notebook
+author: Alex Albright
+date: 8-1-17
+---
+Last week there were four widely-covered Senate votes about healthcare. The results of the votes were often broken down by party (R)/(D) but I wanted a geographic visual summary of the results. I use this notebook to visualize the recent results in the Senate with the machinery of `facet_geo` in the `geofacet` package.
+
+### First, let's generate/clean/format our data.
+I load required packages.
+```{r, message=FALSE, warning=FALSE}
+library(geofacet);library(dplyr);library(ggplot2);library(ggrepel); library(extrafont); library(ggthemes);library(reshape);library(grid);
+library(scales);library(RColorBrewer);library(gridExtra);
+library(magrittr);library(magick)
+```
+Now, I then constructed a `csv` file that contained structured information on the vote to start debate and the three following proposal votes. The NYTimes consistently provided information on how all Senators voted, so I used the following two articles to construct my data set: [article](https://www.nytimes.com/interactive/2017/07/25/us/politics/senate-vote-republican-health-care-bill.html) on the vote to start debate & [article](https://www.nytimes.com/interactive/2017/07/25/us/politics/senate-votes-repeal-obamacare.html) on the three following votes. 
+
+
+I then read in the `csv` file I created from the NYTimes data on the senate votes.
+```{r}
+healthcare <- read.csv('hcare_votes.csv')
+```
+For the purposes of `ggplot2`, we have to reshape everything to be long format. Let's do that with a column for the categories of senators. Then we will subset for each of the 4 votes of interest (starting debate, repeal and replace, partial repeal, and 'skinny' repeal) to create plots for each.
+
+```{r, message=FALSE, warning=FALSE}
+healthcare<-reshape(healthcare, 
+            varying = c("Dem", "R_vote_for_debate", "R_vote_against_debate", "R_vote_for_repeal_replace","R_vote_against_repeal_replace", "R_vote_for_partial_repeal", "R_vote_against_partial_repeal", "R_vote_for_skinny_repeal", "R_vote_against_skinny_repeal"), 
+            v.names = "votes",
+            timevar = "senator_group", 
+            times = c("Dem", "R_vote_for_debate", "R_vote_against_debate", "R_vote_for_repeal_replace","R_vote_against_repeal_replace", "R_vote_for_partial_repeal", "R_vote_against_partial_repeal", "R_vote_for_skinny_repeal", "R_vote_against_skinny_repeal"), 
+            direction = "long")
+```
+Now the data is of the desired long format.
+I now call my theme that I use for coming graphics in `ggplot2`.
+```{r}
+my_theme <- function() {
+
+  # Define colors for the chart
+  palette <- brewer.pal("Greys", n=9)
+  color.background = palette[2]
+  color.grid.major = palette[4]
+  color.panel = palette[3]
+  color.axis.text = palette[9]
+  color.axis.title = palette[9]
+  color.title = palette[9]
+
+  # Create basic construction of chart
+  theme_bw(base_size=9, base_family="Palatino") + 
+
+  # Set the entire chart region to a light gray color
+  theme(panel.background=element_rect(fill=color.panel, color=color.background)) +
+  theme(plot.background=element_rect(fill=color.background, color=color.background)) +
+  theme(panel.border=element_rect(color=color.background)) +
+
+  # Format grid
+  theme(panel.grid.major=element_line(color=color.grid.major,size=.25)) +
+  theme(panel.grid.minor=element_blank()) +
+  theme(axis.ticks=element_blank()) +
+
+  # Format legend
+  theme(legend.position="right") +
+  theme(legend.background = element_rect(fill=color.background)) +
+  theme(legend.text = element_text(size=12,color=color.axis.title)) + 
+  theme(legend.title = element_blank()) + 
+  
+  #Format facet labels
+  theme(strip.text.x = element_text(size = 8, face="bold"))+
+
+  # Format title and axes labels these and tick marks
+  theme(plot.title=element_text(color=color.title, size=28)) +
+  theme(axis.text.x=element_blank()) +
+  theme(axis.text.y=element_blank()) +
+  theme(axis.title.x=element_blank()) +
+  theme(axis.title.y=element_blank()) +
+
+  #Format title and facet_wrap title
+  theme(strip.text = element_text(size=8), plot.title = element_text(size = 24, colour = "black", vjust = 1, hjust=0.5))+
+    
+  # Plot margins
+  theme(plot.margin = unit(c(.5, .2, .2, 2), "cm"))
+}
+```
+
+Let's make plots vote by vote...
+
+# 1. Vote to Start Debate
+
+#### This passed 51-50 on Tuesday, July 25, 2017. (Pence cast the tie-brekaing vote)
+
+We subset to the columns relevant to these results.
+```{r}
+healthcare_debate_vote<-healthcare[which(healthcare$senator_group=="R_vote_for_debate" | healthcare$senator_group=="R_vote_against_debate"| healthcare$senator_group == "Dem"),]
+```
+Plot and save as `png`:
+```{r}
+deb<-ggplot(healthcare_debate_vote, aes("", votes, fill = senator_group)) +
+  geom_col(alpha = 1, width = 1) +
+  my_theme()+
+  coord_flip()+
+  scale_fill_manual(values = c("dodgerblue2", "darkorchid2", "firebrick2"), breaks=c("Dem", "R_vote_against_debate", "R_vote_for_debate"), labels=c("(D) NO     ", "(R) NO     ", "(R) YES     ")) +
+  facet_geo(~ state, grid = "us_state_grid2", label="code") +
+  scale_y_continuous(expand = c(0, 0)) +
+  ggtitle("Senate Votes Visualized:\n Vote to Begin Debate")+
+  labs(caption = "Final vote count: 51-50 (passed with Pence casting the tie-breaking vote)\nBernie Sanders (I-VT) and Angus King (I-ME) caucus with the Democrats\n\nData source: NYTimes | Visualization via Alex Albright (thelittledataset.com) | DC emoji choice via Jesse White") +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    strip.text.x = element_text(size = 7))+
+  ggsave("deb.png", width = 12, height = 8, dpi = 800)
+```
+Now, I want to add a zipper emoji to DC's plot space, as DC has no senators but appears in the graph. 
+```{r}
+# Now call back the plot
+background <- image_read("deb.png")
+
+# And bring in a zipper emoji
+zipper_raw <- image_read("zipper.png")
+
+zipper <- zipper_raw %>%
+  image_scale("400") 
+
+new <- image_composite(background, zipper, offset = "+6650+2850")
+image_write(new, "deb_final.png", flatten = F)
+```
+# 2. Repeal and replace amendment
+#### The `Better Care Reconciliation Act` failed on Tuesday, July 25, 2017.
+
+We subset to the columns relevant to these results.
+```{r}
+healthcare_rr_vote<-healthcare[which(healthcare$senator_group=="R_vote_for_repeal_replace" | healthcare$senator_group=="R_vote_against_repeal_replace"| healthcare$senator_group == "Dem"),]
+```
+Plot and save:
+```{r, message=FALSE, warning=FALSE}
+rr<-ggplot(healthcare_rr_vote, aes("", votes, fill = senator_group)) +
+  geom_col(alpha = 1, width = 1) +
+  my_theme()+
+  coord_flip()+
+  scale_fill_manual(values = c("dodgerblue2", "darkorchid2", "firebrick2"), breaks=c("Dem", "R_vote_against_repeal_replace", "R_vote_for_repeal_replace"), labels=c("(D) NO     ", "(R) NO     ", "(R) YES     ")) +
+  facet_geo(~ state, grid = "us_state_grid2", label="code") +
+  scale_y_continuous(expand = c(0, 0)) +
+  ggtitle("Senate Votes Visualized:\n Repeal and Replace Amendment")+
+  labs(caption = "Final vote count: 43-57 (failed)\nBernie Sanders (I-VT) and Angus King (I-ME) caucus with the Democrats\n\nData source: NYTimes | Visualization via Alex Albright (thelittledataset.com) | DC emoji choice via Jesse White") +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    strip.text.x = element_text(size = 7))+
+   ggsave("rr.png", width = 12, height = 8, dpi = 800)
+```
+Save with DC emoji:
+```{r}
+background <- image_read("rr.png")
+new <- image_composite(background, zipper, offset = "+6650+2850")
+image_write(new, "rr_final.png", flatten = F)
+```
+
+# 3. Partial repeal amendment
+#### The `Obamacare Repeal and Reconciliation Act` failed on Wednesday, July 26, 2017.
+
+We subset to the columns relevant to these results.
+```{r}
+healthcare_pr_vote<-healthcare[which(healthcare$senator_group=="R_vote_for_partial_repeal" | healthcare$senator_group=="R_vote_against_partial_repeal"| healthcare$senator_group == "Dem"),]
+```
+Plot and save:
+```{r, message=FALSE, warning=FALSE}
+pr<-ggplot(healthcare_pr_vote, aes("", votes, fill = senator_group)) +
+  geom_col(alpha = 1, width = 1) +
+  my_theme()+
+  coord_flip()+
+  scale_fill_manual(values = c("dodgerblue2", "darkorchid2", "firebrick2"), breaks=c("Dem", "R_vote_against_partial_repeal", "R_vote_for_partial_repeal"), labels=c("(D) NO     ", "(R) NO     ", "(R) YES     ")) +
+  facet_geo(~ state, grid = "us_state_grid2", label="code") +
+  scale_y_continuous(expand = c(0, 0)) +
+  ggtitle("Senate Votes Visualized:\n Partial Repeal Amendment")+
+  labs(caption = "Final vote count: 45-55 (failed)\nBernie Sanders (I-VT) and Angus King (I-ME) caucus with the Democrats\n\nData source: NYTimes | Visualization via Alex Albright (thelittledataset.com) | DC emoji choice via Jesse White") +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    strip.text.x = element_text(size = 7))+
+   ggsave("pr.png", width = 12, height = 8, dpi = 800)
+```
+Save with DC emoji:
+```{r}
+background <- image_read("pr.png")
+new <- image_composite(background, zipper, offset = "+6650+2850")
+image_write(new, "pr_final.png", flatten = F)
+```
+
+# 4. 'Skinny' repeal amendment
+#### The `Health Care Freedom Act` failed on Friday, July 28, 2017.
+
+We subset to the columns relevant to these results.
+```{r}
+healthcare_sk_vote<-healthcare[which(healthcare$senator_group=="R_vote_for_skinny_repeal" | healthcare$senator_group=="R_vote_against_skinny_repeal"| healthcare$senator_group == "Dem"),]
+```
+Plot and save:
+```{r, message=FALSE, warning=FALSE}
+sk<-ggplot(healthcare_sk_vote, aes("", votes, fill = senator_group)) +
+  geom_col(alpha = 1, width = 1) +
+  my_theme()+
+  coord_flip()+
+  scale_fill_manual(values = c("dodgerblue2", "darkorchid2", "firebrick2"), breaks=c("Dem", "R_vote_against_skinny_repeal", "R_vote_for_skinny_repeal"), labels=c("(D) NO     ", "(R) NO     ", "(R) YES     ")) +
+  facet_geo(~ state, grid = "us_state_grid2", label = "code") +
+  scale_y_continuous(expand = c(0, 0)) +
+  ggtitle("Senate Votes Visualized:\n 'Skinny' Repeal Amendment")+
+  labs(caption = "Final vote count: 49-51 (failed)\nBernie Sanders (I-VT) and Angus King (I-ME) caucus with the Democrats\n\nData source: NYTimes | Visualization via Alex Albright (thelittledataset.com) | DC emoji choice via Jesse White") +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    strip.text.x = element_text(size = 7))+
+   ggsave("sk.png", width = 12, height = 8, dpi = 800)
+```
+
+Save with DC emoji:
+```{r}
+background <- image_read("sk.png")
+new <- image_composite(background, zipper, offset = "+6650+2850")
+image_write(new, "sk_final.png", flatten = F)
+```
+## We have now created `png` plots for each of the four relevant votes!
